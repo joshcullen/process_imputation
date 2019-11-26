@@ -1,0 +1,147 @@
+---
+title: "Process Imputation of Animal Telemetry Data"
+author: "Josh Cullen"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  pdf_document: 
+    fig_caption: yes
+    latex_engine: xelatex
+urlcolor: blue
+header-includes:
+  - \usepackage{float}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+# Imputation Approaches
+
+The snail kite telemetry data, as well as many telemetry datasets, are sampled irregularly in time. While this would not be a problem in some analyses (point process models, continuous-time movement models), the irregular sampling frequency precludes the consistent measurement of movement parameters (step length, turning angle, first passage time, directional persistence, etc) for discrete-time movement models. One possible solution would be to remove all observations that are not sampled at the time step of interest, although this can result in large gaps within the time series. Another simple solution is the use of linear interpolation (i.e. connecting the dots), which assumes a constant speed across consecutive observations and estimates these missing data on a linear path between true observations. This method (1) provides a biased view of the latent trajectory because it is not based on a mechanistic process of the movement dynamics, (2) the observed data are assumed to represent completely accurate positions of the latent trajectory, and (3) uncertainty in the trajectory is not accounted for at the observations or missing data. A more robust method that can account for these limitations is multiple imputation.
+\hfill\break
+
+Multiple imputation is an iterative form of stochastic imputation, which generates a distribution from which inference can be made on the missing values. With respect to animal telemetry data, this includes the application of a process model (e.g. continuous-time correlated random walk using an Ornstein-Uhlenbeck process) as a representation of the latent trajectory to impute missing locations multiple times. This process accounts for the assumed underlying movement dynamics as well as measurement error of the location estimates. Multiple imputation depends on the ability to evaluate the complete-data posterior (i.e. model parameters given the observed and missing data), and the ability to sample missing data sets from the imputation distribution (i.e. the missing data given the observed data). This can be written as:
+
+$$\begin{aligned} \left[ \boldsymbol{\theta }| \mathbf {s}\right]&= \int \left[ \boldsymbol{\theta }, \mathbf {s}_m | \mathbf {s}\right] d\mathbf {s}_m, \\
+&= \int \left[ \boldsymbol{\theta }| \mathbf {s}, \mathbf {s}_m \right] \left[ \mathbf {s}_m | \mathbf {s}\right] d\mathbf {s}_m,\end{aligned}$$
+
+where $\boldsymbol{\theta}$ is a vector of the model parameters, $\mathbf{s}$ is a vector of the data, and $\mathbf{s}_m$ is a vector representing the missing data. In this case, $\left[ \boldsymbol{\theta }| \mathbf {s}\right]$ represents the desired posterior distribution, $\left[ \mathbf {s}_m | \mathbf {s}\right]$ represents the imputation distribution, and $\left[ \boldsymbol{\theta }| \mathbf {s}, \mathbf {s}_m \right]$ represents the complete-data posterior distribution. If $\mathit{K}$ samples are drawn from the imputation distribution, the posterior expectation $\mathbb{E} (\boldsymbol{\theta} | \mathbf{s})$ can be approximated by averaging the imputed data $\mathbf{s}_m$ across all draws. By similarly averaging the variances across all $\mathit{K}$ draws, these can provide a close approximation of the true posterior variance $\text{Var} (\boldsymbol{\theta} | \mathbf{s})$.
+\hfill\break
+
+In terms of animal movement analyses, the telemetry data are defined as $\mathbf {s}\equiv (\mathbf {s}(t_1)',\ldots ,\mathbf {s}(t_n)')'$, a $2n \times 1$ vector, for observation times $t_1, \ldots , t_n$. The true latent position process is represented as $\boldsymbol{\mu }\equiv \left( \boldsymbol{\mu }(t_1)',\ldots ,\boldsymbol{\mu }(t_m)' \right) '$, a $2m \times 1$ vector, where each $\boldsymbol{\mu }(t_j)$ represents a true, but unknown position at time $t_j$. The true position process is often modeled as a distribution conditioned on a set of model parameters $\boldsymbol{\theta}$, such that $\boldsymbol{\mu } \sim \left[\boldsymbol{\mu} | \boldsymbol{\theta} \right]$. In a hierarchical framework, the observed telemetry data are conditioned on the latent trajectory as well as the observation parameters $\boldsymbol{\psi}$, such that $\mathbf {s}\sim \left[ \mathbf {s}| \boldsymbol{\mu }, \boldsymbol{\psi }\right]$. In some circumstances however, fitting a hierchical model of animal telemetry data can exceed computational resources, especially when applying an MCMC algorithm. A method proposed by [Scharf et al. (2017)](https://link.springer.com/article/10.1007/s13253-017-0294-5) can be used to avoid this computational burden using an approximation method termed "process imputation".
+
+
+# Process Imputation
+
+Process imputation is proposed as a method that is "similar in spirit" to multiple imputation, but applies an approximate model-fitting procedure that was originally developed by [Hooten et al. (2010)](https://link.springer.com/article/10.1007%2Fs13253-010-0038-2) and [Hanks et al. (2011)](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0022795). The motivation for this approach arises from a decomposition of the posterior distribution of the process parameters. Using standard properties of conditional probability, the posterior distribution is written as:
+
+$$\begin{aligned} \left[ \boldsymbol{\theta }| \mathbf {s}\right]&= \int \left[ \boldsymbol{\theta }| \boldsymbol{\mu }, \mathbf {s}\right] \left[ \boldsymbol{\mu }| \mathbf {s}\right] d\boldsymbol{\mu }. \end{aligned}$$
+
+This form is similar to that of the first integral which showed an approach for multiple imputation, except that $\mathbf{s}_m$ is replaced by $\boldsymbol{\mu}$. While evaluating the posterior distribution $\left[ \boldsymbol{\theta }| \boldsymbol{\mu }, \mathbf {s}\right]$ up to a proportionality is relatively straightforward, it is more challenging to sample from the process imputation distribution $\left[ \boldsymbol{\mu }| \mathbf {s}\right]$. This is because sampling from the process imputation distribution $\left[ \boldsymbol{\mu }| \mathbf {s}\right] \propto \int \left[ \mathbf {s}| \boldsymbol{\mu }, \boldsymbol{\psi }\right] \left[ \boldsymbol{\mu }\right] \left[ \boldsymbol{\psi }\right] d\boldsymbol{\psi }$ requires that we have the marginal distribution $[\boldsymbol{\mu}]$, which also requires that we evaluate $\left[ \boldsymbol{\mu }\right] = \int \left[ \boldsymbol{\mu }| \boldsymbol{\theta }\right] \left[ \boldsymbol{\theta }\right] d\boldsymbol{\theta }$. For animal telemetry models, this integral is intractable as a result of either noninvertibility or computational burden.
+\hfill\break
+
+To avoid the issues of sampling from the process imputation distribution $\left[ \boldsymbol{\mu }| \mathbf {s}\right]$, we can instead sample from another conditional parameter $\boldsymbol{\mu}^*$. We work under the assumption that $\boldsymbol{\mu}^*$ is sufficiently similar to $\boldsymbol{\mu}$
+that draws from $\left[ \boldsymbol{\mu}^*| \mathbf {s}\right]$ can be used to approximate $\begin{aligned} \left[ \boldsymbol{\theta }| \mathbf {s}\right]&= \int \left[ \boldsymbol{\theta }| \boldsymbol{\mu }, \mathbf {s}\right] \left[ \boldsymbol{\mu }| \mathbf {s}\right] d\boldsymbol{\mu }. \end{aligned}$ Scharf et al. (2017) refer to $\left[ \boldsymbol{\mu}^*| \mathbf {s}\right]$ as the approximate imputation distribution (AID), which is used to discern the true posterior distribution $[\boldsymbol{\theta}^* | \mathbf{s}]$. To perform process imputation, you must first specify a model for $\left[ \boldsymbol{\mu }^* | \mathbf {s}, \boldsymbol{\phi }\right]$, which is parameterized by $\boldsymbol{\phi}$. Estimates of $\boldsymbol{\phi}$ are intially determined by fitting $\left[ \boldsymbol{\mu }^* | \mathbf {s}, \boldsymbol{\phi }\right]$ to the data. While multiple models can be used to fit the AID, the one used in this demonstration is the Ornstein--Uhlenbeck velocity process ([Johnson et al., 2008](https://esajournals.onlinelibrary.wiley.com/doi/full/10.1890/07-1032.1)). Additional details regarding process imputation can be found in the publication by Scharf et al. (2017) and a vignette in R for fitting the model can be found in the Supplementary Material.
+\hfill\break
+
+# Example of Process Imputation of Snail Kite Data
+
+In this example, I will be using the *crawl* package in R to fit the process imputation model based on a Ornstein-Uhlenbeck velocity process within a continuous-time correlated random walk model (CTCRW). Within this framework, I will include an observation error of 30 m in both the x and y directions for each location estimate at a regular time interval of 1 h. Upon fitting the CTCRW model, I will draw 20 samples from the AID to visualize the variability of the trajectory for each of the IDs. From this AID, I will calculate the mean position for the missing locations on the time interval of 1 h, which can be used in all further analyses for deriving movement parameters. These will be used to segment time of the time series for the movement parameters and the clustering of these segments for behavior classification. 
+
+```{r load libraries and data}
+
+library(tidyverse)
+library(lubridate)
+library(rgdal)
+library(crawl)
+library(sf)
+library(furrr)
+library(ggspatial)
+
+source('helper functions.R')
+
+dat<- read.csv("Snail Kite Gridded Data_large.csv", as.is = T)
+dat$ESTtime<- as_datetime(dat$ESTtime)
+dat_red<- dat %>% dplyr::select(id, ESTtime, utmlong, utmlat) #%>% filter(id != 28)
+dat_red <- dat_red %>%
+  mutate(
+    error_semi_major_axis = 30,
+    error_semi_minor_axis = 30,
+    error_ellipse_orientation = 0
+  )
+
+sf_locs <- st_as_sf(dat_red, coords = c("utmlong","utmlat")) %>% st_set_crs(32617)
+
+future::plan(multisession)
+sf_locs <- sf_locs %>% 
+  dplyr::group_by(id) %>% dplyr::arrange(ESTtime) %>% 
+  tidyr::nest() %>% 
+  dplyr::mutate(data = furrr::future_map(data,sf::st_as_sf))
+#############################################################################
+### STAGE 1: Ornstein-Uhlenbeck Approximate Imputation Distribution (AID) ###
+#############################################################################
+set.seed(123)
+
+#set initial values for model
+initial<- map(sf_locs[[2]], init_params)
+
+
+# Set first val of 'fixpar' to 1 since we are providing error info; second and third are set to NA (for sigma and beta, respectively) to be estimated from model; sigma = velocity variation; beta = velocity autocorr
+sf_locs <- sf_locs %>% 
+  dplyr::mutate(fixpar = rep(list(c(1,NA,NA)), nrow(.)))
+
+
+# Run crawl model on all IDs
+dat_fit <- sf_locs %>% 
+  dplyr::mutate(fit = furrr::future_pmap(list(d = data,fixpar = fixpar),
+                                         fit_crawl, .progress = FALSE),
+                params = map(fit, crawl::tidy_crwFit))
+## Draw from AID
+set.seed(1)
+
+K <- 20  #number of draws
+
+#includes observed and predicted locs
+dat_fit <- dat_fit %>% 
+  dplyr::mutate(sim_tracks = furrr::future_map(fit, .get_sim_tracks, iter = K, .progress = FALSE))
+
+#filtering for only predicted locs and creating sf objects
+dat_fit <- dat_fit %>% 
+  dplyr::mutate(sim_lines = crawl::crw_as_sf(.$sim_tracks, ftype = "MULTILINESTRING",
+                                             locType = "p"))
+```
+
+```{r extract coords}
+
+sf_sim_lines <- do.call(rbind,dat_fit$sim_lines) %>% mutate(id = dat_fit$id)
+
+# Create list of mean locations by ID from imputed locs only
+sim_tracks<- modify_depth(dat_fit$sim_tracks, 2,
+                          function(x) cbind(x$alpha.sim[x$locType == "p", c("mu.x","mu.y")],
+                                            time = x$ESTtime[x$locType == "p"])) %>% 
+  lapply(., function(x) do.call(cbind, x)) %>%
+  lapply(., function(x) cbind(mu.x = apply(x[,which(colnames(x) == "mu.x")], 1, mean),
+                              mu.y = apply(x[,which(colnames(x) == "mu.y")], 1, mean),
+                              time = x[,"time"])) %>%
+  map(., data.frame) %>% 
+  set_names(dat_fit$id)
+
+#change from numeric to POSIXct
+sim_tracks<- lapply(sim_tracks, function(x){x$time <- intToPOSIX(x$time, tz = "UTC"); x})
+
+#make single DF and add 'id' column
+id.vec<- rep(names(sim_tracks), lapply(sim_tracks, nrow) %>% unlist())
+sim_tracks_df<- map_dfr(sim_tracks, `[`) %>% cbind(id = id.vec, .)
+```
+
+```{r plot, fig.align='center', fig.width=12, fig.height=9, fig.pos='H', fig.cap="Simulated tracks are shown in different colors by ID for all 20 draws from the AID. Dark grey points represent known observations at irregular time intervals, while light grey points represent at a regular time interval of 1 h."}
+ggplot(data = sf_sim_lines) +
+  geom_sf(aes(color = as.factor(id)), size = 0.25, alpha = 1, show.legend = "line") +
+  geom_point(data = sim_tracks_df, aes(mu.x, mu.y), color = "grey80", alpha = 0.6, size = 1) +
+  geom_point(data = dat, aes(utmlong, utmlat), color = "grey45", alpha = 0.6) +
+  theme_bw() +
+  facet_wrap(~id) +
+  scale_color_discrete("ID", guide = guide_legend(override.aes = list(size = 1))) +
+  labs(x="Longitude", y="Latitude")
+```
+
