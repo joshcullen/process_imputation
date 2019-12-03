@@ -113,6 +113,8 @@ sim_tracks<- modify_depth(dat_fit$sim_tracks, 2,
   lapply(., function(x) do.call(cbind, x)) %>%
   lapply(., function(x) cbind(mu.x = apply(x[,which(colnames(x) == "mu.x")], 1, mean),
                               mu.y = apply(x[,which(colnames(x) == "mu.y")], 1, mean),
+                              sd.x = apply(x[,which(colnames(x) == "mu.x")], 1, sd),
+                              sd.y = apply(x[,which(colnames(x) == "mu.y")], 1, sd),
                               time = x[,"time"])) %>%
   map(., data.frame) %>% 
   set_names(dat_fit$id)
@@ -124,14 +126,6 @@ sim_tracks<- lapply(sim_tracks, function(x){x$time <- intToPOSIX(x$time, tz = "U
 id.vec<- rep(names(sim_tracks), lapply(sim_tracks, nrow) %>% unlist())
 sim_tracks_df<- map_dfr(sim_tracks, `[`) %>% cbind(id = id.vec, .)
 
-
-ggplot(data = sp_locs, aes(long,lat)) +
-  geom_path(aes(color=id)) +
-  geom_point(data = sim_tracks_df, aes(mu.x, mu.y), color = "grey80", alpha = 0.7) +
-  geom_point(data = dat, aes(utmlong, utmlat), color = "grey45", alpha = 0.6) +
-  coord_equal() +
-  theme_bw() +
-  scale_color_discrete("ID", labels = names(sim_tracks))
 
 ggplot(data = sf_sim_lines) +
   geom_sf(aes(color = as.factor(id)), size = 0.25, alpha = 1, show.legend = "line") +
