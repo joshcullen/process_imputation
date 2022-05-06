@@ -45,7 +45,7 @@ initial<- map(sf_locs[[2]], init_params)
 
 # Set first val of 'fixpar' to 1 since we are providing error info; second and third are set to NA (for sigma and beta, respectively) to be estimated from model; sigma = velocity variation; beta = velocity autocorr
 sf_locs <- sf_locs %>% 
-  dplyr::mutate(fixpar = rep(list(c(1,NA,NA)), nrow(.)))
+  dplyr::mutate(fixpar = list(c(1,NA,NA)))
 
 
 # Run crawl model on all IDs
@@ -65,27 +65,26 @@ dat_fit <- dat_fit %>%
   dplyr::mutate(sim_tracks = furrr::future_map(fit, .get_sim_tracks, iter = K, .progress = TRUE))
 
 #filtering for only predicted locs and creating sf objects
-dat_fit <- dat_fit %>% 
-  dplyr::mutate(sim_lines = crawl::crw_as_sf(.$sim_tracks, ftype = "MULTILINESTRING",
-                                             locType = "p"))
+dat_fit$sim_lines <- crawl::crw_as_sf(dat_fit$sim_tracks, ftype = "MULTILINESTRING", locType = "p")
 
 
 
 ## Plot
 
-sf_sim_lines <- do.call(rbind,dat_fit$sim_lines) %>% mutate(id = dat_fit$id)
+sf_sim_lines <- do.call(rbind,dat_fit$sim_lines) %>% 
+  mutate(id = dat_fit$id)
 
 esri_ocean <- paste0('https://services.arcgisonline.com/arcgis/rest/services/',
                      'Ocean/World_Ocean_Base/MapServer/tile/${z}/${y}/${x}.jpeg')
 
 ggplot() + 
   annotation_map_tile(type = esri_ocean,zoomin = 1,progress = "none") +
-  layer_spatial(sf_sim_lines, size = 0.25, alpha = 0.1, aes(color = as.factor(id))) +
-  geom_point(data = dat, aes(utmlong, utmlat), color = "grey45") +
-  facet_wrap(~id, nrow = 2) +
-  scale_x_continuous(expand = expand_scale(mult = c(.6, .6))) +
-  scale_y_continuous(expand = expand_scale(mult = c(0.35, 0.35))) +
-  scale_color_brewer(palette = "Dark2") +
+  layer_spatial(sf_sim_lines[1,], size = 0.25, alpha = 0.1, aes(color = as.factor(id))) +
+  # geom_point(data = dat %>% filter(id == 1), aes(utmlong, utmlat), color = "grey45") +
+  # facet_wrap(~id, nrow = 2) +
+  scale_x_continuous(expand = expansion(mult = c(.6, .6))) +
+  scale_y_continuous(expand = expansion(mult = c(0.35, 0.35))) +
+  scale_color_viridis_d() +
   theme(legend.position = "none") +
   ggtitle("Simulated Location Paths", 
           subtitle = "snail kites (n=4), Florida, USA")
